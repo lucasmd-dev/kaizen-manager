@@ -62,15 +62,24 @@ class ProjectRunner: ObservableObject {
             prefix += "export JAVA_HOME=$(/usr/libexec/java_home -v \(jv)); "
         }
 
+        // Detect n location (Apple Silicon: /opt/homebrew, Intel: /usr/local)
+        let nPath: String
+        if FileManager.default.fileExists(atPath: "/opt/homebrew/bin/n") {
+            nPath = "/opt/homebrew/bin/n"
+        } else {
+            nPath = "/usr/local/bin/n"
+        }
+
         let finalCommand: String
         if let nv = nodeVersion {
             // Use `n exec` to isolate the Node version without touching global state
-            finalCommand = "\(prefix)cd \(projectPath) && /opt/homebrew/bin/n exec \(nv) \(baseCommand)"
+            finalCommand = "\(prefix)cd \(projectPath) && \(nPath) exec \(nv) \(baseCommand)"
         } else {
-            finalCommand = "\(prefix)cd \(projectPath) && source ~/.zshrc 2>/dev/null; \(baseCommand)"
+            finalCommand = "\(prefix)cd \(projectPath) && \(baseCommand)"
         }
 
-        process?.arguments = ["-c", finalCommand]
+        // -l (login shell) loads ~/.zprofile so Homebrew PATH is available (mvn, node, etc.)
+        process?.arguments = ["-l", "-c", finalCommand]
 
         let pipe = Pipe()
         process?.standardOutput = pipe

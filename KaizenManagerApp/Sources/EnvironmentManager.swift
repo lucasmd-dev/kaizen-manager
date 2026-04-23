@@ -25,6 +25,13 @@ class EnvironmentManager: ObservableObject {
         loadInstalledVersions()
     }
 
+    // Detect n location at runtime to support both Apple Silicon and Intel Macs
+    private var nPath: String {
+        FileManager.default.fileExists(atPath: "/opt/homebrew/bin/n")
+            ? "/opt/homebrew/bin/n"
+            : "/usr/local/bin/n"
+    }
+
     private func loadInstalledVersions() {
         DispatchQueue.global(qos: .userInitiated).async {
             let nodes = self.detectInstalledNodeVersions()
@@ -44,7 +51,7 @@ class EnvironmentManager: ObservableObject {
 
     private func detectInstalledNodeVersions() -> [String] {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/n")
+        process.executableURL = URL(fileURLWithPath: nPath)
         process.arguments = ["ls"]
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -116,7 +123,7 @@ class EnvironmentManager: ObservableObject {
             DispatchQueue.global(qos: .background).async {
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-                let command = "echo '\(pass)' | sudo -S /opt/homebrew/bin/n \(version) && node --version"
+                let command = "echo '\(pass)' | sudo -S \(self.nPath) \(version) && node --version"
                 process.arguments = ["-c", command]
                 let pipe = Pipe()
                 process.standardOutput = pipe
