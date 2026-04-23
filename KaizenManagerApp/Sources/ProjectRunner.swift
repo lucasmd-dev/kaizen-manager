@@ -10,8 +10,15 @@ enum ProjectStatus {
 
 class ProjectRunner: ObservableObject {
     let name: String
-    let projectPath: String
     let baseCommand: String
+
+    // Mutable so the user can change the folder at runtime
+    @Published var projectPath: String {
+        didSet {
+            UserDefaults.standard.set(projectPath, forKey: "\(name)_Path")
+            gitMonitor = GitMonitor(projectPath: projectPath)
+        }
+    }
 
     @Published var nodeVersion: String? {
         didSet { UserDefaults.standard.set(nodeVersion, forKey: "\(name)_Node") }
@@ -29,17 +36,16 @@ class ProjectRunner: ObservableObject {
 
     init(name: String, projectPath: String, baseCommand: String, nodeVersion: String? = nil, javaVersion: String? = nil) {
         self.name = name
-        self.projectPath = projectPath
         self.baseCommand = baseCommand
-        self.gitMonitor = GitMonitor(projectPath: projectPath)
+        let storedPath = UserDefaults.standard.string(forKey: "\(name)_Path") ?? projectPath
+        self.projectPath = storedPath
+        self.gitMonitor = GitMonitor(projectPath: storedPath)
         self.nodeVersion = UserDefaults.standard.string(forKey: "\(name)_Node") ?? nodeVersion
         self.javaVersion = UserDefaults.standard.string(forKey: "\(name)_Java") ?? javaVersion
     }
 
     private func updateStatus(_ newStatus: ProjectStatus) {
-        DispatchQueue.main.async {
-            self.status = newStatus
-        }
+        DispatchQueue.main.async { self.status = newStatus }
     }
 
     func start() {
@@ -56,7 +62,7 @@ class ProjectRunner: ObservableObject {
             prefix += "export JAVA_HOME=$(/usr/libexec/java_home -v \(jv)); "
         }
 
-        var finalCommand: String
+        let finalCommand: String
         if let nv = nodeVersion {
             // Use `n exec` to isolate the Node version without touching global state
             finalCommand = "\(prefix)cd \(projectPath) && /opt/homebrew/bin/n exec \(nv) \(baseCommand)"
@@ -86,17 +92,14 @@ class ProjectRunner: ObservableObject {
                 handle.closeFile()
             }
 
-            if String(data: data, encoding: .utf8) != nil {
-                if self.status == .starting {
-                    self.updateStatus(.running)
-                }
+            if String(data: data, encoding: .utf8) != nil, self.status == .starting {
+                self.updateStatus(.running)
             }
         }
 
         process?.terminationHandler = { [weak self] process in
             guard let self = self else { return }
             self.process = nil
-
             if self.isIntentionallyStopped {
                 self.updateStatus(.stopped)
             } else {
@@ -115,13 +118,8 @@ class ProjectRunner: ObservableObject {
 
     func stop() {
         guard status == .starting || status == .running else { return }
-
         isIntentionallyStopped = true
-
-        if let process = process, process.isRunning {
-            process.terminate()
-        }
-
+        if let process = process, process.isRunning { process.terminate() }
         updateStatus(.stopped)
     }
 }

@@ -1,28 +1,28 @@
 import Foundation
 import AppKit
 
-/// Manages the user-selected root folder that contains KS-Service, KS-Mob and KS-Tools.
+/// Persists and retrieves the folder path for each individual project.
 class ProjectRootManager {
     static let shared = ProjectRootManager()
 
-    private let defaultsKey = "ProjectRootPath"
-
-    var rootPath: String? {
-        get { UserDefaults.standard.string(forKey: defaultsKey) }
-        set { UserDefaults.standard.set(newValue, forKey: defaultsKey) }
+    private func key(for projectName: String) -> String {
+        "ProjectPath_\(projectName)"
     }
 
-    func path(for project: String) -> String? {
-        guard let root = rootPath else { return nil }
-        return (root as NSString).appendingPathComponent(project)
+    func path(for projectName: String) -> String? {
+        UserDefaults.standard.string(forKey: key(for: projectName))
     }
 
-    /// Presents an NSOpenPanel to pick the root folder. Calls completion with true if user confirmed.
-    func promptForRootFolder(completion: @escaping (Bool) -> Void) {
+    func setPath(_ path: String, for projectName: String) {
+        UserDefaults.standard.set(path, forKey: key(for: projectName))
+    }
+
+    /// Opens an NSOpenPanel to let the user pick the folder for a specific project.
+    func promptForPath(projectName: String, completion: @escaping (String?) -> Void) {
         DispatchQueue.main.async {
             let panel = NSOpenPanel()
-            panel.title = "Selecione a pasta raiz dos projetos Kaizen"
-            panel.message = "Escolha a pasta que contém KS-Service, KS-Mob e KS-Tools."
+            panel.title = "Pasta do \(projectName)"
+            panel.message = "Selecione a pasta raiz do projeto \(projectName)."
             panel.canChooseFiles = false
             panel.canChooseDirectories = true
             panel.canCreateDirectories = false
@@ -31,10 +31,10 @@ class ProjectRootManager {
             NSApp.activate(ignoringOtherApps: true)
 
             if panel.runModal() == .OK, let url = panel.url {
-                self.rootPath = url.path
-                completion(true)
+                self.setPath(url.path, for: projectName)
+                completion(url.path)
             } else {
-                completion(false)
+                completion(nil)
             }
         }
     }

@@ -11,7 +11,7 @@ struct KaizenMenuView: View {
     var quitAction: () -> Void
     var startAllAction: () -> Void
     var stopAllAction: () -> Void
-    var changeFolderAction: () -> Void
+    var changeFolderAction: (ProjectRunner) -> Void
 
     @State private var tempPass = ""
     @FocusState private var passFieldFocused: Bool
@@ -27,9 +27,9 @@ struct KaizenMenuView: View {
                 Divider().padding(.horizontal, 10).padding(.vertical, 4)
 
                 Group {
-                    RunnerRow(runner: serviceRunner)
-                    RunnerRow(runner: mobRunner)
-                    RunnerRow(runner: toolsRunner)
+                    RunnerRow(runner: serviceRunner, changeFolderAction: { changeFolderAction(serviceRunner) })
+                    RunnerRow(runner: mobRunner,    changeFolderAction: { changeFolderAction(mobRunner) })
+                    RunnerRow(runner: toolsRunner,  changeFolderAction: { changeFolderAction(toolsRunner) })
                 }
 
                 Divider().padding(.horizontal, 10).padding(.vertical, 4)
@@ -121,8 +121,6 @@ struct KaizenMenuView: View {
 
                 Divider().padding(.horizontal, 10).padding(.vertical, 4)
 
-                MenuButton(title: "Change Folder…", action: changeFolderAction)
-
                 MenuButton(title: "Quit", shortcut: "⌘Q", action: quitAction)
             }
             .padding(.vertical, 8)
@@ -185,6 +183,7 @@ struct VisualEffectView: NSViewRepresentable {
 struct RunnerRow: View {
     @ObservedObject var runner: ProjectRunner
     @State private var isFetching = false
+    var changeFolderAction: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -207,6 +206,7 @@ struct RunnerRow: View {
 
             HStack(spacing: 4) {
                 Spacer().frame(width: 22)
+
                 Picker("", selection: Binding(
                     get: { runner.gitMonitor.currentBranch },
                     set: { runner.gitMonitor.checkout(branch: $0) }
@@ -224,6 +224,16 @@ struct RunnerRow: View {
 
                 Spacer()
 
+                // Change project folder
+                Button(action: changeFolderAction) {
+                    Image(systemName: "folder.badge.gear")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Alterar pasta do \(runner.name)")
+
+                // git fetch
                 Button(action: {
                     isFetching = true
                     runner.gitMonitor.fetchRemote { isFetching = false }

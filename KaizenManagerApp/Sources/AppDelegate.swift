@@ -8,23 +8,70 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var panel: NSPanel!
     var eventMonitor: Any?
 
-    var serviceRunner: ProjectRunner?
-    var mobRunner: ProjectRunner?
-    var toolsRunner: ProjectRunner?
+    var serviceRunner: ProjectRunner!
+    var mobRunner: ProjectRunner!
+    var toolsRunner: ProjectRunner!
 
     private var cancellables = Set<AnyCancellable>()
-    private var menuView: KaizenMenuView?
+
+    // Projects that still need a folder assigned on first launch
+    private let projectNames = ["KS-Service", "KS-Mob", "KS-Tools"]
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        // Runners are created with a placeholder path; stored path is loaded in init
+        serviceRunner = ProjectRunner(
+            name: "KS-Service",
+            projectPath: "",
+            baseCommand: "mvn clean spring-boot:run",
+            javaVersion: "17"
+        )
+        mobRunner = ProjectRunner(
+            name: "KS-Mob",
+            projectPath: "",
+            baseCommand: "npm run ionic:serve",
+            nodeVersion: "12"
+        )
+        toolsRunner = ProjectRunner(
+            name: "KS-Tools",
+            projectPath: "",
+            baseCommand: "npm start",
+            nodeVersion: "16"
+        )
+
         setupStatusItem()
         setupPanel()
+        subscribeToRunnerState()
 
-        if ProjectRootManager.shared.rootPath != nil {
-            initRunners()
+        let missing = projectNames.filter { ProjectRootManager.shared.path(for: $0) == nil }
+        if missing.isEmpty {
+            applyStoredPaths()
         } else {
-            ProjectRootManager.shared.promptForRootFolder { [weak self] confirmed in
-                if confirmed { self?.initRunners() }
+            promptSequentially(names: missing, index: 0) { [weak self] in
+                self?.applyStoredPaths()
             }
+        }
+    }
+
+    // MARK: - Path helpers
+
+    private func applyStoredPaths() {
+        if let p = ProjectRootManager.shared.path(for: "KS-Service") { serviceRunner.projectPath = p }
+        if let p = ProjectRootManager.shared.path(for: "KS-Mob")     { mobRunner.projectPath = p }
+        if let p = ProjectRootManager.shared.path(for: "KS-Tools")   { toolsRunner.projectPath = p }
+    }
+
+    /// Asks the user to pick a folder for each project in `names`, one at a time.
+    private func promptSequentially(names: [String], index: Int, completion: @escaping () -> Void) {
+        guard index < names.count else { completion(); return }
+        ProjectRootManager.shared.promptForPath(projectName: names[index]) { [weak self] _ in
+            self?.promptSequentially(names: names, index: index + 1, completion: completion)
+        }
+    }
+
+    func changeFolder(for runner: ProjectRunner) {
+        runner.stop()
+        ProjectRootManager.shared.promptForPath(projectName: runner.name) { path in
+            if let path = path { runner.projectPath = path }
         }
     }
 
@@ -55,6 +102,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupPanel() {
+        let menuView = KaizenMenuView(
+            serviceRunner: serviceRunner,
+            mobRunner: mobRunner,
+            toolsRunner: toolsRunner,
+            quitAction: { [weak self] in self?.quitApp() },
+            startAllAction: { [weak self] in self?.startAll() },
+            stopAllAction: { [weak self] in self?.stopAll() },
+            changeFolderAction: { [weak self] runner in self?.changeFolder(for: runner) }
+        )
+
         panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 280, height: 260),
             styleMask: [.nonactivatingPanel, .borderless],
@@ -67,54 +124,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
-    }
 
-    private func initRunners() {
-        guard
-            let servicePath = ProjectRootManager.shared.path(for: "KS-Service"),
-            let mobPath = ProjectRootManager.shared.path(for: "KS-Mob"),
-            let toolsPath = ProjectRootManager.shared.path(for: "KS-Tools")
-        else { return }
-
-        let svc = ProjectRunner(
-            name: "KS-Service",
-            projectPath: servicePath,
-            baseCommand: "mvn clean spring-boot:run",
-            javaVersion: "17"
-        )
-        let mob = ProjectRunner(
-            name: "KS-Mob",
-            projectPath: mobPath,
-            baseCommand: "npm run ionic:serve",
-            nodeVersion: "12"
-        )
-        let tools = ProjectRunner(
-            name: "KS-Tools",
-            projectPath: toolsPath,
-            baseCommand: "npm start",
-            nodeVersion: "16"
-        )
-
-        serviceRunner = svc
-        mobRunner = mob
-        toolsRunner = tools
-
-        let view = KaizenMenuView(
-            serviceRunner: svc,
-            mobRunner: mob,
-            toolsRunner: tools,
-            quitAction: { [weak self] in self?.quitApp() },
-            startAllAction: { [weak self] in self?.startAll() },
-            stopAllAction: { [weak self] in self?.stopAll() },
-            changeFolderAction: { [weak self] in self?.changeFolder() }
-        )
-        menuView = view
-
-        let hostingView = NSHostingView(rootView: view)
+        let hostingView = NSHostingView(rootView: menuView)
         hostingView.layer?.backgroundColor = NSColor.clear.cgColor
         panel.contentView = hostingView
+    }
 
-        Publishers.CombineLatest3(svc.$status, mob.$status, tools.$status)
+    private func subscribeToRunnerState() {
+        Publishers.CombineLatest3(serviceRunner.$status, mobRunner.$status, toolsRunner.$status)
             .receive(on: RunLoop.main)
             .sink { _ in }
             .store(in: &cancellables)
@@ -175,26 +192,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Actions
 
     func startAll() {
-        serviceRunner?.start()
-        mobRunner?.start()
-        toolsRunner?.start()
+        serviceRunner.start()
+        mobRunner.start()
+        toolsRunner.start()
     }
 
     func stopAll() {
-        serviceRunner?.stop()
-        mobRunner?.stop()
-        toolsRunner?.stop()
-    }
-
-    func changeFolder() {
-        hidePanel()
-        stopAll()
-        ProjectRootManager.shared.promptForRootFolder { [weak self] confirmed in
-            if confirmed {
-                self?.cancellables.removeAll()
-                self?.initRunners()
-            }
-        }
+        serviceRunner.stop()
+        mobRunner.stop()
+        toolsRunner.stop()
     }
 
     func quitApp() {
