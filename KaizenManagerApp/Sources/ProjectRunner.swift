@@ -70,7 +70,7 @@ class ProjectRunner: ObservableObject {
         process?.standardOutput = pipe
         process?.standardError = pipe
 
-        let logURL = URL(fileURLWithPath: "/Users/lucas/Documents/Kaizen/Kaizen/\(name).log")
+        let logURL = URL(fileURLWithPath: projectPath).appendingPathComponent("\(name).log")
         if !FileManager.default.fileExists(atPath: logURL.path) {
             FileManager.default.createFile(atPath: logURL.path, contents: nil, attributes: nil)
         }

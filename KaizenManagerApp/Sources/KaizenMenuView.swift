@@ -11,6 +11,7 @@ struct KaizenMenuView: View {
     var quitAction: () -> Void
     var startAllAction: () -> Void
     var stopAllAction: () -> Void
+    var changeFolderAction: () -> Void
 
     @State private var tempPass = ""
     @FocusState private var passFieldFocused: Bool
@@ -119,6 +120,8 @@ struct KaizenMenuView: View {
                 }
 
                 Divider().padding(.horizontal, 10).padding(.vertical, 4)
+
+                MenuButton(title: "Change Folder…", action: changeFolderAction)
 
                 MenuButton(title: "Quit", shortcut: "⌘Q", action: quitAction)
             }

@@ -8,69 +8,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var panel: NSPanel!
     var eventMonitor: Any?
 
-    var serviceRunner: ProjectRunner!
-    var mobRunner: ProjectRunner!
-    var toolsRunner: ProjectRunner!
+    var serviceRunner: ProjectRunner?
+    var mobRunner: ProjectRunner?
+    var toolsRunner: ProjectRunner?
 
     private var cancellables = Set<AnyCancellable>()
+    private var menuView: KaizenMenuView?
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        serviceRunner = ProjectRunner(
-            name: "KS-Service",
-            projectPath: "/Users/lucas/Documents/Kaizen/Kaizen/KS-Service",
-            baseCommand: "mvn clean spring-boot:run",
-            javaVersion: "17"
-        )
+        setupStatusItem()
+        setupPanel()
 
-        mobRunner = ProjectRunner(
-            name: "KS-Mob",
-            projectPath: "/Users/lucas/Documents/Kaizen/Kaizen/KS-Mob",
-            baseCommand: "npm run ionic:serve",
-            nodeVersion: "12"
-        )
+        if ProjectRootManager.shared.rootPath != nil {
+            initRunners()
+        } else {
+            ProjectRootManager.shared.promptForRootFolder { [weak self] confirmed in
+                if confirmed { self?.initRunners() }
+            }
+        }
+    }
 
-        toolsRunner = ProjectRunner(
-            name: "KS-Tools",
-            projectPath: "/Users/lucas/Documents/Kaizen/Kaizen/KS-Tools",
-            baseCommand: "npm start",
-            nodeVersion: "16"
-        )
+    // MARK: - Setup
 
-        let menuView = KaizenMenuView(
-            serviceRunner: serviceRunner,
-            mobRunner: mobRunner,
-            toolsRunner: toolsRunner,
-            quitAction: { [weak self] in self?.quitApp() },
-            startAllAction: { [weak self] in self?.startAll() },
-            stopAllAction: { [weak self] in self?.stopAll() }
-        )
-
-        panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 280, height: 260),
-            styleMask: [.nonactivatingPanel, .borderless],
-            backing: .buffered,
-            defer: false
-        )
-        panel.isFloatingPanel = true
-        panel.level = .popUpMenu
-        panel.collectionBehavior = [.canJoinAllSpaces, .ignoresCycle]
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = true
-
-        let hostingView = NSHostingView(rootView: menuView)
-        hostingView.layer?.backgroundColor = NSColor.clear.cgColor
-        panel.contentView = hostingView
-
+    private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem.button {
             if let imagePath = Bundle.main.path(forResource: "MenuBarIcon", ofType: "png"),
                let customImage = NSImage(contentsOfFile: imagePath) {
-                let maxWidth: CGFloat = 20
-                let maxHeight: CGFloat = 20
+                let maxSize: CGFloat = 20
                 let originalSize = customImage.size
-                let ratio = min(maxWidth / originalSize.width, maxHeight / originalSize.height)
+                let ratio = min(maxSize / originalSize.width, maxSize / originalSize.height)
                 customImage.size = NSSize(width: originalSize.width * ratio, height: originalSize.height * ratio)
                 customImage.isTemplate = false
                 button.image = customImage
@@ -84,8 +52,69 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.action = #selector(togglePanel(_:))
             button.target = self
         }
+    }
 
-        Publishers.CombineLatest3(serviceRunner.$status, mobRunner.$status, toolsRunner.$status)
+    private func setupPanel() {
+        panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 280, height: 260),
+            styleMask: [.nonactivatingPanel, .borderless],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isFloatingPanel = true
+        panel.level = .popUpMenu
+        panel.collectionBehavior = [.canJoinAllSpaces, .ignoresCycle]
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+    }
+
+    private func initRunners() {
+        guard
+            let servicePath = ProjectRootManager.shared.path(for: "KS-Service"),
+            let mobPath = ProjectRootManager.shared.path(for: "KS-Mob"),
+            let toolsPath = ProjectRootManager.shared.path(for: "KS-Tools")
+        else { return }
+
+        let svc = ProjectRunner(
+            name: "KS-Service",
+            projectPath: servicePath,
+            baseCommand: "mvn clean spring-boot:run",
+            javaVersion: "17"
+        )
+        let mob = ProjectRunner(
+            name: "KS-Mob",
+            projectPath: mobPath,
+            baseCommand: "npm run ionic:serve",
+            nodeVersion: "12"
+        )
+        let tools = ProjectRunner(
+            name: "KS-Tools",
+            projectPath: toolsPath,
+            baseCommand: "npm start",
+            nodeVersion: "16"
+        )
+
+        serviceRunner = svc
+        mobRunner = mob
+        toolsRunner = tools
+
+        let view = KaizenMenuView(
+            serviceRunner: svc,
+            mobRunner: mob,
+            toolsRunner: tools,
+            quitAction: { [weak self] in self?.quitApp() },
+            startAllAction: { [weak self] in self?.startAll() },
+            stopAllAction: { [weak self] in self?.stopAll() },
+            changeFolderAction: { [weak self] in self?.changeFolder() }
+        )
+        menuView = view
+
+        let hostingView = NSHostingView(rootView: view)
+        hostingView.layer?.backgroundColor = NSColor.clear.cgColor
+        panel.contentView = hostingView
+
+        Publishers.CombineLatest3(svc.$status, mob.$status, tools.$status)
             .receive(on: RunLoop.main)
             .sink { _ in }
             .store(in: &cancellables)
@@ -108,12 +137,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
     }
 
+    // MARK: - Panel
+
     @objc func togglePanel(_ sender: AnyObject?) {
-        if panel.isVisible {
-            hidePanel()
-        } else {
-            showPanel()
-        }
+        if panel.isVisible { hidePanel() } else { showPanel() }
     }
 
     func showPanel() {
@@ -145,22 +172,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Actions
+
     func startAll() {
-        serviceRunner.start()
-        mobRunner.start()
-        toolsRunner.start()
+        serviceRunner?.start()
+        mobRunner?.start()
+        toolsRunner?.start()
     }
 
     func stopAll() {
-        serviceRunner.stop()
-        mobRunner.stop()
-        toolsRunner.stop()
+        serviceRunner?.stop()
+        mobRunner?.stop()
+        toolsRunner?.stop()
+    }
+
+    func changeFolder() {
+        hidePanel()
+        stopAll()
+        ProjectRootManager.shared.promptForRootFolder { [weak self] confirmed in
+            if confirmed {
+                self?.cancellables.removeAll()
+                self?.initRunners()
+            }
+        }
     }
 
     func quitApp() {
-        serviceRunner.stop()
-        mobRunner.stop()
-        toolsRunner.stop()
+        stopAll()
         NSApplication.shared.terminate(self)
     }
 }
