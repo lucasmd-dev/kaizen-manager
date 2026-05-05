@@ -183,6 +183,7 @@ struct VisualEffectView: NSViewRepresentable {
 struct RunnerRow: View {
     @ObservedObject var runner: ProjectRunner
     @State private var isFetching = false
+    @State private var isPulling = false
     var changeFolderAction: () -> Void
 
     var body: some View {
@@ -244,6 +245,27 @@ struct RunnerRow: View {
                 }
                 .buttonStyle(PlainButtonStyle())
                 .help("git fetch")
+
+                // git pull
+                Button(action: {
+                    isPulling = true
+                    runner.gitMonitor.pullCurrent { isPulling = false }
+                }) {
+                    Image(systemName: isPulling ? "arrow.triangle.2.circlepath" : "arrow.down.to.line")
+                        .font(.system(size: 11))
+                        .foregroundColor(isPulling ? .yellow : .secondary)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("git pull")
+
+                // Abrir log
+                Button(action: { runner.openLog() }) {
+                    Image(systemName: "doc.text")
+                        .font(.system(size: 11))
+                        .foregroundColor(runner.status == .error ? .red : .secondary)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help(runner.lastError.isEmpty ? "Abrir log" : runner.lastError)
             }
             .padding(.bottom, 2)
         }

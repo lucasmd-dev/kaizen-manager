@@ -72,6 +72,14 @@ class GitMonitor: ObservableObject {
         }
     }
 
+    func pullCurrent(completion: @escaping () -> Void) {
+        DispatchQueue.global(qos: .background).async {
+            _ = self.runGit(args: ["pull"])
+            self.fetchData()
+            DispatchQueue.main.async { completion() }
+        }
+    }
+
     private func runGit(args: [String]) -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")

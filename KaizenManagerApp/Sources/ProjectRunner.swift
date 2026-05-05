@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import AppKit
 
 enum ProjectStatus {
     case stopped
@@ -11,6 +12,9 @@ enum ProjectStatus {
 class ProjectRunner: ObservableObject {
     let name: String
     let baseCommand: String
+    /// When set, the status only moves to .running once this keyword appears in stdout.
+    /// When nil, any output marks the process as running.
+    let startedKeyword: String?
 
     // Mutable so the user can change the folder at runtime
     @Published var projectPath: String {
@@ -33,10 +37,14 @@ class ProjectRunner: ObservableObject {
 
     @Published var status: ProjectStatus = .stopped
     @Published var gitMonitor: GitMonitor
+    @Published var lastError: String = ""
 
-    init(name: String, projectPath: String, baseCommand: String, nodeVersion: String? = nil, javaVersion: String? = nil) {
+    init(name: String, projectPath: String, baseCommand: String,
+         nodeVersion: String? = nil, javaVersion: String? = nil,
+         startedKeyword: String? = nil) {
         self.name = name
         self.baseCommand = baseCommand
+        self.startedKeyword = startedKeyword
         let storedPath = UserDefaults.standard.string(forKey: "\(name)_Path") ?? projectPath
         self.projectPath = storedPath
         self.gitMonitor = GitMonitor(projectPath: storedPath)
@@ -70,12 +78,15 @@ class ProjectRunner: ObservableObject {
             nPath = "/usr/local/bin/n"
         }
 
+        // Properly quote the path to handle spaces (e.g. "Kaizen Freela")
+        let quotedPath = "'" + projectPath.replacingOccurrences(of: "'", with: "'\\''" ) + "'"
+
         let finalCommand: String
         if let nv = nodeVersion {
             // Use `n exec` to isolate the Node version without touching global state
-            finalCommand = "\(prefix)cd \(projectPath) && \(nPath) exec \(nv) \(baseCommand)"
+            finalCommand = "\(prefix)cd \(quotedPath) && \(nPath) exec \(nv) \(baseCommand)"
         } else {
-            finalCommand = "\(prefix)cd \(projectPath) && \(baseCommand)"
+            finalCommand = "\(prefix)cd \(quotedPath) && \(baseCommand)"
         }
 
         // -l (login shell) loads ~/.zprofile so Homebrew PATH is available (mvn, node, etc.)
@@ -85,10 +96,12 @@ class ProjectRunner: ObservableObject {
         process?.standardOutput = pipe
         process?.standardError = pipe
 
+        // Store log next to app support folder so paths with spaces don't cause issues
         let logURL = URL(fileURLWithPath: projectPath).appendingPathComponent("\(name).log")
-        if !FileManager.default.fileExists(atPath: logURL.path) {
-            FileManager.default.createFile(atPath: logURL.path, contents: nil, attributes: nil)
-        }
+        // Truncate / create fresh log on each start
+        FileManager.default.createFile(atPath: logURL.path, contents: nil, attributes: nil)
+        self.logURL = logURL
+        DispatchQueue.main.async { self.lastError = "" }
 
         pipe.fileHandleForReading.readabilityHandler = { [weak self] fileHandle in
             guard let self = self else { return }
@@ -101,8 +114,20 @@ class ProjectRunner: ObservableObject {
                 handle.closeFile()
             }
 
-            if String(data: data, encoding: .utf8) != nil, self.status == .starting {
-                self.updateStatus(.running)
+            if let text = String(data: data, encoding: .utf8) {
+                // Keep the last ~800 chars visible for quick error inspection
+                DispatchQueue.main.async {
+                    self.lastError = String((self.lastError + text).suffix(800))
+                    if self.status == .starting {
+                        let isReady: Bool
+                        if let kw = self.startedKeyword {
+                            isReady = text.contains(kw)
+                        } else {
+                            isReady = true  // any output = running for Node apps
+                        }
+                        if isReady { self.updateStatus(.running) }
+                    }
+                }
             }
         }
 
@@ -112,15 +137,21 @@ class ProjectRunner: ObservableObject {
             if self.isIntentionallyStopped {
                 self.updateStatus(.stopped)
             } else {
+                let msg = "Processo encerrado com código \(process.terminationStatus)"
+                print("[\(self.name)] \(msg)")
+                DispatchQueue.main.async {
+                    if self.lastError.isEmpty { self.lastError = msg }
+                }
                 self.updateStatus(.error)
-                print("[\(self.name)] Exited with status \(process.terminationStatus)")
             }
         }
 
         do {
             try process?.run()
         } catch {
-            print("[\(self.name)] Failed to start: \(error)")
+            let msg = "Falha ao iniciar: \(error.localizedDescription)"
+            print("[\(self.name)] \(msg)")
+            DispatchQueue.main.async { self.lastError = msg }
             updateStatus(.error)
         }
     }
@@ -130,5 +161,20 @@ class ProjectRunner: ObservableObject {
         isIntentionallyStopped = true
         if let process = process, process.isRunning { process.terminate() }
         updateStatus(.stopped)
+    }
+
+    // MARK: - Log
+
+    private var logURL: URL?
+
+    /// Opens the log file in the default app (Console or TextEdit).
+    func openLog() {
+        guard let url = logURL else {
+            // Build URL from path even if process hasn't started yet
+            let fallback = URL(fileURLWithPath: projectPath).appendingPathComponent("\(name).log")
+            NSWorkspace.shared.open(fallback)
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 }

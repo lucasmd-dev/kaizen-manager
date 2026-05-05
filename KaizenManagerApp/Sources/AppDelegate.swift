@@ -22,19 +22,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         serviceRunner = ProjectRunner(
             name: "KS-Service",
             projectPath: "",
-            baseCommand: "mvn clean spring-boot:run",
-            javaVersion: "17"
+            baseCommand: "mvn spring-boot:run",
+            javaVersion: "17",
+            startedKeyword: "Started ServiceApplication"
         )
         mobRunner = ProjectRunner(
             name: "KS-Mob",
             projectPath: "",
-            baseCommand: "npm run ionic:serve",
+            baseCommand: "[ -d node_modules ] || npm install && npm run ionic:serve",
             nodeVersion: "12"
         )
         toolsRunner = ProjectRunner(
             name: "KS-Tools",
             projectPath: "",
-            baseCommand: "npm start",
+            baseCommand: "[ -d node_modules ] || npm install && npm start",
             nodeVersion: "16"
         )
 
