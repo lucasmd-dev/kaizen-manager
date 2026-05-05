@@ -19,7 +19,8 @@ class ProjectRunner: ObservableObject {
     // Mutable so the user can change the folder at runtime
     @Published var projectPath: String {
         didSet {
-            UserDefaults.standard.set(projectPath, forKey: "\(name)_Path")
+            // Use ProjectRootManager so the key matches what AppDelegate reads on next launch
+            ProjectRootManager.shared.setPath(projectPath, for: name)
             gitMonitor = GitMonitor(projectPath: projectPath)
         }
     }
@@ -45,7 +46,8 @@ class ProjectRunner: ObservableObject {
         self.name = name
         self.baseCommand = baseCommand
         self.startedKeyword = startedKeyword
-        let storedPath = UserDefaults.standard.string(forKey: "\(name)_Path") ?? projectPath
+        // Read from ProjectRootManager (same key used by AppDelegate)
+        let storedPath = ProjectRootManager.shared.path(for: name) ?? projectPath
         self.projectPath = storedPath
         self.gitMonitor = GitMonitor(projectPath: storedPath)
         self.nodeVersion = UserDefaults.standard.string(forKey: "\(name)_Node") ?? nodeVersion
