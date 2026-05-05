@@ -29,13 +29,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         mobRunner = ProjectRunner(
             name: "KS-Mob",
             projectPath: "",
-            baseCommand: "[ -d node_modules ] || npm install && npm run ionic:serve",
+            baseCommand: "sh -c '[ -d node_modules ] || npm install && npm run ionic:serve'",
             nodeVersion: "12"
         )
         toolsRunner = ProjectRunner(
             name: "KS-Tools",
             projectPath: "",
-            baseCommand: "[ -d node_modules ] || npm install && npm start",
+            baseCommand: "sh -c '[ -d node_modules ] || npm install && npm start'",
             nodeVersion: "16"
         )
 
