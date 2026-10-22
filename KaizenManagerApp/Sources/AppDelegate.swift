@@ -11,11 +11,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var serviceRunner: ProjectRunner!
     var mobRunner: ProjectRunner!
     var toolsRunner: ProjectRunner!
+    var controlRunner: ProjectRunner!
 
     private var cancellables = Set<AnyCancellable>()
 
     // Projects that still need a folder assigned on first launch
-    private let projectNames = ["KS-Service", "KS-Mob", "KS-Tools"]
+    private let projectNames = ["KS-Service", "KS-Mob", "KS-Tools", "Control"]
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         // Runners are created with a placeholder path; stored path is loaded in init
@@ -38,6 +39,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             baseCommand: "sh -c '[ -d node_modules ] || npm install && npm start'",
             nodeVersion: "16"
         )
+        controlRunner = ProjectRunner(
+            name: "Control",
+            projectPath: "/Users/lucas/Documents/Projetos Pessoais/remote control/panel",
+            baseCommand: "npm run dev",
+            nodeVersion: "24.14.1"
+        )
 
         setupStatusItem()
         setupPanel()
@@ -59,6 +66,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let p = ProjectRootManager.shared.path(for: "KS-Service") { serviceRunner.projectPath = p }
         if let p = ProjectRootManager.shared.path(for: "KS-Mob")     { mobRunner.projectPath = p }
         if let p = ProjectRootManager.shared.path(for: "KS-Tools")   { toolsRunner.projectPath = p }
+        if let p = ProjectRootManager.shared.path(for: "Control") { controlRunner.projectPath = p }
     }
 
     /// Asks the user to pick a folder for each project in `names`, one at a time.
@@ -107,6 +115,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             serviceRunner: serviceRunner,
             mobRunner: mobRunner,
             toolsRunner: toolsRunner,
+            controlRunner: controlRunner,
             quitAction: { [weak self] in self?.quitApp() },
             startAllAction: { [weak self] in self?.startAll() },
             stopAllAction: { [weak self] in self?.stopAll() },
@@ -132,26 +141,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func subscribeToRunnerState() {
-        Publishers.CombineLatest3(serviceRunner.$status, mobRunner.$status, toolsRunner.$status)
+        Publishers.CombineLatest4(serviceRunner.$status, mobRunner.$status, toolsRunner.$status, controlRunner.$status)
             .receive(on: RunLoop.main)
             .sink { _ in }
-            .store(in: &cancellables)
-
-        // Show password prompt as key window so SecureField accepts keyboard input
-        PasswordManager.shared.$showPasswordPrompt
-            .receive(on: RunLoop.main)
-            .sink { [weak self] showing in
-                guard let self = self else { return }
-                if showing {
-                    self.panel.styleMask.insert(.titled)
-                    self.panel.styleMask.remove(.nonactivatingPanel)
-                    self.panel.makeKeyAndOrderFront(nil)
-                    NSApp.activate(ignoringOtherApps: true)
-                } else {
-                    self.panel.styleMask.remove(.titled)
-                    self.panel.styleMask.insert(.nonactivatingPanel)
-                }
-            }
             .store(in: &cancellables)
     }
 
@@ -196,12 +188,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         serviceRunner.start()
         mobRunner.start()
         toolsRunner.start()
+        controlRunner.start()
     }
 
     func stopAll() {
         serviceRunner.stop()
         mobRunner.stop()
         toolsRunner.stop()
+        controlRunner.stop()
     }
 
     func quitApp() {

@@ -4,17 +4,12 @@ struct KaizenMenuView: View {
     @ObservedObject var serviceRunner: ProjectRunner
     @ObservedObject var mobRunner: ProjectRunner
     @ObservedObject var toolsRunner: ProjectRunner
-    @ObservedObject var loginManager = LoginItemManager.shared
-    @ObservedObject var passwordManager = PasswordManager.shared
-    @ObservedObject var environmentManager = EnvironmentManager()
+    @ObservedObject var controlRunner: ProjectRunner
 
     var quitAction: () -> Void
     var startAllAction: () -> Void
     var stopAllAction: () -> Void
     var changeFolderAction: (ProjectRunner) -> Void
-
-    @State private var tempPass = ""
-    @FocusState private var passFieldFocused: Bool
 
     var body: some View {
         ZStack {
@@ -30,93 +25,7 @@ struct KaizenMenuView: View {
                     RunnerRow(runner: serviceRunner, changeFolderAction: { changeFolderAction(serviceRunner) })
                     RunnerRow(runner: mobRunner,    changeFolderAction: { changeFolderAction(mobRunner) })
                     RunnerRow(runner: toolsRunner,  changeFolderAction: { changeFolderAction(toolsRunner) })
-                }
-
-                Divider().padding(.horizontal, 10).padding(.vertical, 4)
-
-                Text("Ambiente Global")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 4)
-
-                HStack {
-                    Text("Node Version").font(.system(size: 13))
-                    Spacer()
-                    Picker("", selection: $environmentManager.globalNodeVersion) {
-                        if environmentManager.installedNodeVersions.isEmpty {
-                            Text(environmentManager.globalNodeVersion).tag(environmentManager.globalNodeVersion)
-                        } else {
-                            ForEach(environmentManager.installedNodeVersions, id: \.self) { v in
-                                Text(v).tag(v)
-                            }
-                        }
-                    }
-                    .frame(width: 90)
-                    .labelsHidden()
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 4)
-
-                HStack {
-                    Text("Java Version").font(.system(size: 13))
-                    Spacer()
-                    Picker("", selection: $environmentManager.globalJavaVersion) {
-                        if environmentManager.installedJavaVersions.isEmpty {
-                            Text(environmentManager.globalJavaVersion).tag(environmentManager.globalJavaVersion)
-                        } else {
-                            ForEach(environmentManager.installedJavaVersions, id: \.self) { v in
-                                Text("Java \(v)").tag(v)
-                            }
-                        }
-                    }
-                    .frame(width: 90)
-                    .labelsHidden()
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 4)
-
-                HStack(spacing: 6) {
-                    Image(systemName: passwordManager.hasPassword ? "lock.open.fill" : "lock.fill")
-                        .font(.system(size: 11))
-                        .foregroundColor(passwordManager.hasPassword ? .green : .secondary)
-                        .frame(width: 16)
-                    SecureField(passwordManager.hasPassword ? "Senha salva ✓" : "Senha sudo", text: $tempPass)
-                        .font(.system(size: 12))
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .onSubmit {
-                            if !tempPass.isEmpty {
-                                passwordManager.setPassword(tempPass)
-                                tempPass = ""
-                                let v = environmentManager.globalNodeVersion
-                                environmentManager.globalNodeVersion = v
-                            }
-                        }
-                    if !tempPass.isEmpty {
-                        Button("OK") {
-                            passwordManager.setPassword(tempPass)
-                            tempPass = ""
-                            let v = environmentManager.globalNodeVersion
-                            environmentManager.globalNodeVersion = v
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 2)
-
-                Divider().padding(.horizontal, 10).padding(.vertical, 4)
-
-                HoverButton(action: { loginManager.toggle() }) {
-                    HStack {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 11, weight: .bold))
-                            .opacity(loginManager.isEnabled ? 1 : 0)
-                            .frame(width: 16)
-                        Text("Start on Login").font(.system(size: 13))
-                        Spacer()
-                    }
+                    RunnerRow(runner: controlRunner, changeFolderAction: { changeFolderAction(controlRunner) })
                 }
 
                 Divider().padding(.horizontal, 10).padding(.vertical, 4)
@@ -131,40 +40,6 @@ struct KaizenMenuView: View {
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(Color.primary.opacity(0.1), lineWidth: 1)
             )
-
-            if passwordManager.showPasswordPrompt {
-                VStack(spacing: 12) {
-                    Text("Senha sudo").font(.headline)
-                    Text("Para trocar o Node global. Digitado visivelmente para confirmar.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                    TextField("Digite sua senha", text: $tempPass)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .focused($passFieldFocused)
-                    HStack {
-                        Button("Cancelar") {
-                            passwordManager.showPasswordPrompt = false
-                            tempPass = ""
-                        }
-                        Button("Confirmar") {
-                            passwordManager.setPassword(tempPass)
-                            tempPass = ""
-                            let v = environmentManager.globalNodeVersion
-                            environmentManager.globalNodeVersion = v
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(tempPass.isEmpty)
-                    }
-                }
-                .padding()
-                .frame(width: 230)
-                .background(VisualEffectView())
-                .cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.3)))
-                .shadow(radius: 12)
-                .onAppear { passFieldFocused = true }
-            }
         }
     }
 }
